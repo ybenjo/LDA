@@ -30,7 +30,6 @@ public:
   }
 };
 
-
 vector<string> split_string(string s, string c){
   vector<string> ret;
   for(int i = 0, n = 0; i <= s.length(); i = n + 1){
@@ -57,31 +56,23 @@ public:
   }
 
   int set_author(string author){
-    bool not_found = true;
     for(int i = 0; i < authors.size(); ++i){
       if(authors.at(i) == author){
-	not_found = false;
 	return i;
       }
     }
-    if(not_found){
-      authors.push_back(author);
-      return authors.size() - 1;
-    }
+    authors.push_back(author);
+    return authors.size() - 1;
   }
 
   int set_word(string word){
-    bool not_found = true;
     for(int i = 0; i < words.size(); ++i){
       if(words.at(i) == word){
-	not_found = false;
 	return i;
       }
     }
-    if(not_found){
-      words.push_back(word);
-      return words.size() - 1;
-    }
+    words.push_back(word);
+    return words.size() - 1;
   }
 
   double set_document(vector<string> doc){
