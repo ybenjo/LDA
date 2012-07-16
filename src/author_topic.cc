@@ -99,19 +99,20 @@ public:
     each_documents.push_back(id_doc);
 
     // set random topics
-    // author と同じ topic を全部割り振る
     vector<int> topics;
-    int init_author_topic = rand() % this->t;
-    topics.push_back(init_author_topic);
-    c_at[make_pair(author_id, init_author_topic)]++;
-    sum_c_at[author_id]++;
-    
+    // dummy topic
+    topics.push_back(0);
+
     for(int i = 1; i < id_doc.size(); ++i){
+      int word_id = id_doc.at(i);
+      
+      sum_c_at[author_id]++;
+      
       int init_word_topic = rand() % this->t;
       topics.push_back(init_word_topic);
-      
-      int word_id = id_doc.at(i);
+
       c_wt[make_pair(word_id, init_word_topic)]++;
+      c_at[make_pair(author_id, init_word_topic)]++;
       sum_c_wt[init_word_topic]++;
     }
     each_topics.push_back(topics);
@@ -135,32 +136,27 @@ public:
       c_at_count = c_at[make_pair(author_id, topic_id)];
     }
     
-    double prob = (c_wt_count + this->beta)/(sum_c_wt[topic_id] + v * this -> beta);
-    prob *= (c_at_count + this->alpha)/(sum_c_at[author_id] + this->t * this -> alpha);
+    double prob = (c_wt_count + this->beta) / (sum_c_wt[topic_id] + v * this -> beta);
+    prob *= (c_at_count + this->alpha) / (sum_c_at[author_id] + this->t * this -> alpha);
 
     return prob;
   }
 
   void sampling(int pos_doc, int pos_word){
-
+    int author_id = (each_documents.at(pos_doc)).at(0);
+    int word_id = (each_documents.at(pos_doc)).at(pos_word);
+    
     // 現在の状態から一度引く
     int prev_word_topic = (each_topics.at(pos_doc)).at(pos_word);
-    int word_id = (each_documents.at(pos_doc)).at(pos_word);
     c_wt[make_pair(word_id, prev_word_topic)]--;
-    
-    int prev_author_topic = (each_topics.at(pos_doc)).at(0);
-    int author_id = (each_documents.at(pos_doc)).at(0);
-    c_at[make_pair(author_id, prev_author_topic)]--;
-
-    // これも更新する必要がある
+    c_at[make_pair(author_id, prev_word_topic)]--;
     sum_c_wt[prev_word_topic]--;
 
-    // 累積密度が入ったもの
+    // 累積密度が入った vector
     // イメージ図
     //  |------t_1-----|---t_2---|-t_3-|------t_4-----|
     // 0.0                ^^                         1.0
     vector<double> prob;
-    double sum = 0.0;
     // 全トピックについて足し合わせる
     for(int i = 0; i < this->t; ++i){
       double now_prob = sampling_prob(author_id, word_id, i);
@@ -168,9 +164,9 @@ public:
       if(i > 0){
 	prob.at(i) += prob.at(i - 1);
       }
-      sum += now_prob;
     }
     // [0,  1] にスケールする
+    double sum = prob.at(prob.size() - 1);
     for(int i = 0; i < this->t; ++i){
       prob.at(i) /= sum;
     }
@@ -187,7 +183,6 @@ public:
     }
 
     // 更新する
-    (each_topics.at(pos_doc)).at(0) = new_topic;
     (each_topics.at(pos_doc)).at(pos_word) = new_topic;
     c_at[make_pair(author_id, new_topic)]++;
     c_wt[make_pair(word_id, new_topic)]++;
@@ -207,42 +202,16 @@ public:
   }
 
   void output(char* filename){
-    ostringstream oss_phi;
-    oss_phi << filename << "_phi" ;
-    ofstream ofs_phi;
-    ofs_phi.open((oss_phi.str()).c_str());
-
-    for(int topic_id = 0; topic_id < this->t; ++topic_id){
-      // ソート
-      multimap<double, string> phi;
-      for(int word_id = 0; word_id < words.size(); ++word_id){
-	int c_wt_count = 0;
-	if(c_wt.find(make_pair(word_id, topic_id)) != c_wt.end()){
-	  c_wt_count = c_wt[make_pair(word_id, topic_id)];
-	}
-	double score = (c_wt_count + this->beta)/(sum_c_wt[topic_id] + words.size() * this -> beta);
-	phi.insert(make_pair(score, words.at(word_id)));
-      }
-
-      // 出力
-      multimap<double, string>::reverse_iterator j;
-      int count = 0;
-      for(j = phi.rbegin(); j != phi.rend(); ++j){
-	if(count >= this->show_limit){
-	  break;
-	}else{
-	  ofs_phi << topic_id << "\t" << j->second << "\t" << j->first << endl;
-	  count++;
-	}
-      }
-    }
-    ofs_phi.close();
-  
+    // output theta
     ostringstream oss_theta;
     oss_theta << filename << "_theta" ;
     ofstream ofs_theta;
     ofs_theta.open((oss_theta.str()).c_str());
 
+    // key: <author_id, topic_id>
+    // value: theta
+    unordered_map<key, double, myhash, myeq> all_theta;
+    
     for(int author_id = 0; author_id < authors.size(); ++author_id){
       // ソート
       multimap<double, int> theta;
@@ -255,6 +224,7 @@ public:
 	
 	double score = (c_at_count + this->alpha)/(sum_c_at[author_id] + this->t * this -> alpha);
 	theta.insert(make_pair(score, topic_id));
+	all_theta[make_pair(author_id, topic_id)] = score;
       }
 
       // 出力
@@ -270,8 +240,67 @@ public:
       }
     }
     ofs_theta.close();
+
+    // output phi
+    ostringstream oss_phi;
+    oss_phi << filename << "_phi" ;
+    ofstream ofs_phi;
+    ofs_phi.open((oss_phi.str()).c_str());
+
+    // output mix
+    ostringstream oss_mix;
+    oss_mix << filename << "_mix" ;
+    ofstream ofs_mix;
+    ofs_mix.open((oss_mix.str()).c_str());
+
+    for(int topic_id = 0; topic_id < this->t; ++topic_id){
+      // ソート
+      multimap<double, string> phi;
+      for(int word_id = 0; word_id < words.size(); ++word_id){
+	int c_wt_count = 0;
+	if(c_wt.find(make_pair(word_id, topic_id)) != c_wt.end()){
+	  c_wt_count = c_wt[make_pair(word_id, topic_id)];
+	}
+	double score = (c_wt_count + this->beta)/(sum_c_wt[topic_id] + words.size() * this -> beta);
+	phi.insert(make_pair(score, words.at(word_id)));
+      }
+
+      // all theta もソートする
+      multimap<double, string> topic_given_theta;
+      for(int author_id = 0; author_id < authors.size(); ++author_id){
+	double score = all_theta[make_pair(author_id, topic_id)];
+	topic_given_theta.insert(make_pair(score, authors.at(author_id)));
+      }
+
+      // 出力
+      multimap<double, string>::reverse_iterator j;
+      int count = 0;
+      for(j = phi.rbegin(); j != phi.rend(); ++j){
+	if(count >= this->show_limit){
+	  break;
+	}else{
+	  ofs_phi << topic_id << "\t" << j->second << "\t" << j->first << endl;
+	  ofs_mix << topic_id << "\t" << j->second << "\t" << j->first << endl;
+	  count++;
+	}
+      }
+
+      ofs_mix << "----------" << endl;
+      
+      count = 0;
+      for(j = topic_given_theta.rbegin(); j != topic_given_theta.rend(); ++j){
+	if(count >= this->show_limit){
+	  break;
+	}else{
+	  ofs_mix << topic_id << "\t" << j->second << "\t" << j->first << endl;
+	  count++;
+	}
+      }
+      ofs_mix << "------------------------------" << endl;
+    }
+    ofs_phi.close();
+    ofs_mix.close();
   }
-}
   
 private:
   // key: <word_id, topic_id>
@@ -288,8 +317,11 @@ private:
   vector<string> words;
   
   // vector of author_id, word_id, ...
+  // each element: document
   vector<vector<int> > each_documents;
-  // vector of author_topic_id, word_topic_id, ...
+  
+  // vector of dummy_topic_id, word_topic_id, ...
+  // each element: document
   vector<vector<int> > each_topics;
 
   unordered_map<int, int> sum_c_at;
