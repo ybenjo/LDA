@@ -1,45 +1,5 @@
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <map>
-#include <unordered_map>
-#include <set>
-#include <vector>
-#include <string>
-#include <algorithm>
-#include <stdlib.h>
-#include <time.h>
-
+#include "common.cc"
 using namespace std;
-typedef pair<int, int> key;
-
-struct myeq : std::binary_function<std::pair<int, int>, std::pair<int, int>, bool>{
-  bool operator() (const std::pair<int, int> & x, const std::pair<int, int> & y) const{
-    return x.first == y.first && x.second == y.second;
-  }
-};
-
-struct myhash : std::unary_function<std::pair<int, int>, size_t>{
-private:
-  const std::hash<int> h_int;
-public:
-  myhash() : h_int() {}
-  size_t operator()(const std::pair<int, int> & p) const{
-    size_t seed = h_int(p.first);
-    return h_int(p.second) + 0x9e3779b9 + (seed<<6) + (seed>>2);
-  }
-};
-
-vector<string> split_string(string s, string c){
-  vector<string> ret;
-  for(int i = 0, n = 0; i <= s.length(); i = n + 1){
-    n = s.find_first_of(c, i);
-    if(n == string::npos) n = s.length();
-    string tmp = s.substr(i, n-i);
-    ret.push_back(tmp);
-  }
-  return ret;
-}
 
 class AuthorTopic{
 public:
@@ -109,10 +69,6 @@ public:
     each_topics.push_back(topics);
   }
 
-  double uniform_rand(){
-    return (double)rand() * (1.0 / (RAND_MAX + 1.0));
-  }
-
   double sampling_prob(int author_id, int word_id, int topic_id){
     int v = words.size();
     unordered_map<key, int, myhash, myeq>::iterator i;
@@ -137,18 +93,18 @@ public:
     int author_id = (each_documents.at(pos_doc)).at(0);
     int word_id = (each_documents.at(pos_doc)).at(pos_word);
     
-    // 現在の状態から一度引く
+    // except current status
     int prev_word_topic = (each_topics.at(pos_doc)).at(pos_word);
     c_wt[make_pair(word_id, prev_word_topic)]--;
     c_at[make_pair(author_id, prev_word_topic)]--;
     sum_c_wt[prev_word_topic]--;
 
-    // 累積密度が入った vector
-    // イメージ図
+    // vector contains prob density
+    // image
     //  |------t_1-----|---t_2---|-t_3-|------t_4-----|
     // 0.0                ^^                         1.0
     vector<double> prob;
-    // 全トピックについて足し合わせる
+    // sum all topics
     for(int i = 0; i < this->t; ++i){
       double now_prob = sampling_prob(author_id, word_id, i);
       prob.push_back(now_prob);
@@ -156,7 +112,7 @@ public:
 	prob.at(i) += prob.at(i - 1);
       }
     }
-    // [0,  1] にスケールする
+    // scaling [0,  1]
     double sum = prob.at(prob.size() - 1);
     for(int i = 0; i < this->t; ++i){
       prob.at(i) /= sum;
@@ -173,12 +129,12 @@ public:
       }
     }
 
-    // 更新する
+    // update each val
     (each_topics.at(pos_doc)).at(pos_word) = new_topic;
     c_at[make_pair(author_id, new_topic)]++;
     c_wt[make_pair(word_id, new_topic)]++;
 
-    // これも更新する必要がある
+    // update too
     sum_c_wt[new_topic]++;
   }
 
@@ -205,7 +161,7 @@ public:
     
     for(int author_id = 0; author_id < authors.size(); ++author_id){
       // ソート
-      multimap<double, int> theta;
+      vector<pair<double, int> > theta;
       for(int topic_id = 0; topic_id < this->t ; ++topic_id){
 
 	int c_at_count = 0;
@@ -214,18 +170,19 @@ public:
 	}
 	
 	double score = (c_at_count + this->alpha)/(sum_c_at[author_id] + this->t * this -> alpha);
-	theta.insert(make_pair(score, topic_id));
+	theta.push_back(make_pair(score, topic_id));
 	all_theta[make_pair(author_id, topic_id)] = score;
       }
 
-      // 出力
-      multimap<double, int>::reverse_iterator j;
+      // output
+      sort(theta.begin(), theta.end());
+      vector<pair<double, int> >::reverse_iterator j;
       int count = 0;
       for(j = theta.rbegin(); j != theta.rend(); ++j){
 	if(count >= this->show_limit){
 	  break;
 	}else{
-	  ofs_theta << authors.at(author_id) << "\t" << j->second << "\t" << j->first << endl;
+	  ofs_theta << authors.at(author_id) << "\t" << (*j).second << "\t" << (*j).first << endl;
 	  count++;
 	}
       }
@@ -245,45 +202,46 @@ public:
     ofs_mix.open((oss_mix.str()).c_str());
 
     for(int topic_id = 0; topic_id < this->t; ++topic_id){
-      // ソート
-      multimap<double, string> phi;
+      // sort
+      vector<pair<double, string> > phi;
       for(int word_id = 0; word_id < words.size(); ++word_id){
 	int c_wt_count = 0;
 	if(c_wt.find(make_pair(word_id, topic_id)) != c_wt.end()){
 	  c_wt_count = c_wt[make_pair(word_id, topic_id)];
 	}
 	double score = (c_wt_count + this->beta)/(sum_c_wt[topic_id] + words.size() * this -> beta);
-	phi.insert(make_pair(score, words.at(word_id)));
+	phi.push_back(make_pair(score, words.at(word_id)));
       }
 
-      // all theta もソートする
-      multimap<double, string> topic_given_theta;
+      // sort all theta
+      vector<pair<double, string> > topic_given_theta;
       for(int author_id = 0; author_id < authors.size(); ++author_id){
 	double score = all_theta[make_pair(author_id, topic_id)];
-	topic_given_theta.insert(make_pair(score, authors.at(author_id)));
+	topic_given_theta.push_back(make_pair(score, authors.at(author_id)));
       }
 
-      // 出力
-      multimap<double, string>::reverse_iterator j;
+      // output
+      sort(phi.begin(), phi.end());
+      vector<pair<double, string> >::reverse_iterator j;
       int count = 0;
       for(j = phi.rbegin(); j != phi.rend(); ++j){
 	if(count >= this->show_limit){
 	  break;
 	}else{
-	  ofs_phi << topic_id << "\t" << j->second << "\t" << j->first << endl;
-	  ofs_mix << topic_id << "\t" << j->second << "\t" << j->first << endl;
+	  ofs_phi << topic_id << "\t" << (*j).second << "\t" << (*j).first << endl;
+	  ofs_mix << topic_id << "\t" << (*j).second << "\t" << (*j).first << endl;
 	  count++;
 	}
       }
 
       ofs_mix << "----------" << endl;
-      
+      sort(topic_given_theta.begin(), topic_given_theta.end());
       count = 0;
       for(j = topic_given_theta.rbegin(); j != topic_given_theta.rend(); ++j){
 	if(count >= this->show_limit){
 	  break;
 	}else{
-	  ofs_mix << topic_id << "\t" << j->second << "\t" << j->first << endl;
+	  ofs_mix << topic_id << "\t" << (*j).second << "\t" << (*j).first << endl;
 	  count++;
 	}
       }
@@ -337,7 +295,7 @@ int main(int argc, char** argv){
   ifs.open(filename, ios::in);
   string line;
   while(getline(ifs, line)){
-    // 想定するファイルの形式は
+    // file format
     // author \t w_1 \t w_2 ...
     vector<string> elem = split_string(line, "\t");
     t.set_document(elem);
@@ -346,4 +304,3 @@ int main(int argc, char** argv){
   t.sampling_all();
   t.output(filename);
 }
-
