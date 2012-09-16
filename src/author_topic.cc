@@ -1,4 +1,5 @@
 #include "common.cc"
+#include "progress.hpp"
 using namespace std;
 
 class AuthorTopic{
@@ -139,11 +140,13 @@ public:
   }
 
   void sampling_all(){
+    boost::progress_display progress( this->loop_count * this->each_documents.size() );
     for(int i = 0; i < this->loop_count; ++i){
       for(int pos_doc = 0; pos_doc <  each_documents.size(); ++pos_doc){
 	for(int pos_word = 1; pos_word < (each_documents.at(pos_doc)).size(); ++pos_word){
 	  sampling(pos_doc, pos_word);
 	}
+	++progress;
       }
     }
   }
