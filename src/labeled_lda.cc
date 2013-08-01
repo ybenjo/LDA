@@ -46,7 +46,6 @@ public:
     return labels.size() - 1;
   }
 
-
   double set_document(vector<string> doc){
     vector<int> id_doc;
     // set doc_name
@@ -311,10 +310,24 @@ int main(int argc, char** argv){
   int topic_size = atoi(argv[4]);
   double beta = 0.01;
   LabeledLDA t(alpha, beta, topic_size, atoi(argv[5]), atoi(argv[6]));
-  
+
+
   ifstream ifs;
-  ifs.open(filename, ios::in);
   string line;
+
+  // read doc - label
+  // ドキュメントの初期化にラベル情報が必要なので先に読む
+  ifs.open(label_filename, ios::in);
+  while(getline(ifs, line)){
+    // file format
+    // doc_name \t w_1 \t w_2 ...
+    vector<string> elem = split_string(line, "\t");
+    t.set_label(elem);
+  }
+  ifs.close();
+
+  // read doc - word
+  ifs.open(filename, ios::in);
   while(getline(ifs, line)){
     // file format
     // doc_name \t w_1 \t w_2 ...
@@ -322,6 +335,7 @@ int main(int argc, char** argv){
     t.set_document(elem);
   }
   ifs.close();
+
   t.sampling_all();
   t.output(filename);
 }
