@@ -41,7 +41,7 @@ public:
 	return i;
       }
     }
-    _documents.push_back(_document);
+    _documents.push_back(document);
     return _documents.size() - 1;
   }
 
@@ -56,13 +56,13 @@ public:
   }
 
   int set_label(string label){
-    for(int i = 0; i < labels.size(); ++i){
-      if(labels.at(i) == label){
+    for(int i = 0; i < _labels.size(); ++i){
+      if(_labels.at(i) == label){
 	return i;
       }
     }
-    labels.push_back(label);
-    return labels.size() - 1;
+    _labels.push_back(label);
+    return _labels.size() - 1;
   }
 
   void set_label_information(vector<string> elem){
@@ -75,7 +75,7 @@ public:
     // label を id に変換して格納
     for(int i = 1; i < elem.size(); ++i){
       int label_id = set_label(elem.at(i));
-      labels.push label_id;
+      labels.push_back(label_id);
     }
     _doc_labels[document_id] = labels;
   }
@@ -121,7 +121,7 @@ public:
       // 問題はここで，初期トピックの時点で手元のトピックから振らなければならない
       // なので，毎 doc ごとに新しく label の個数だけ面を持つサイコロを作り直す
       int label_size = (_doc_labels[document_id]).size();
-      DICE<boost::uniform_int<> > dice = DICE<boost::uniform_int<> > rand_t(0, (label_size - 1));
+      DICE<boost::uniform_int<> > dice(0, (label_size - 1));
       int random_index = dice();
       int init_word_topic = _doc_labels[document_id].at(random_index);
       topics.push_back(init_word_topic);
@@ -148,7 +148,9 @@ public:
     }
     
     double prob = (c_wt_count + _beta) / (_sum_c_wt[topic_id] + v * _beta);
-    prob *= (c_at_count + _alpha) / (_sum_c_at[document_id] + _t * _alpha);
+    // ここが曖昧
+    // LDA だと _t * _alpha になっているけど ???
+    prob *= (c_at_count + _alpha) / (_sum_c_at[document_id] + _labels.size() * _alpha);
 
     return prob;
   }
@@ -161,7 +163,7 @@ public:
     int prev_word_topic = (_each_topics.at(pos_doc)).at(pos_word);
     _c_wt[make_pair(word_id, prev_word_topic)]--;
     _c_at[make_pair(document_id, prev_word_topic)]--;
-    sum_c_wt[prev_word_topic]--;
+    _sum_c_wt[prev_word_topic]--;
 
     // vector contains prob density
     // image
@@ -240,8 +242,9 @@ public:
 	if(_c_at.find(make_pair(document_id, topic_id)) != _c_at.end()){
 	  c_at_count = _c_at[make_pair(document_id, topic_id)];
 	}
-	
-	double score = (c_at_count + _alpha)/(_sum_c_at[document_id] + _t * _alpha);
+
+	// ここもあやふや
+	double score = (c_at_count + _alpha)/(_sum_c_at[document_id] + _labels.size() * _alpha);
 	theta.push_back(make_pair(score, topic_id));
 	all_theta[make_pair(document_id, topic_id)] = score;
       }
@@ -256,8 +259,8 @@ public:
 	}else{
 	  // ofs_theta << documents.at(document_id) << "\t" << (*j).second << "\t" << (*j).first << endl;
 	  int label_pos = (*j).second;
-	  string label_name = _labels.at(label_pos)
-	  ofs_theta << documents.at(document_id) << "\t" << label_name << "\t" << (*j).first << endl;
+	  string label_name = _labels.at(label_pos);
+	  ofs_theta << _documents.at(document_id) << "\t" << label_name << "\t" << (*j).first << endl;
 	  count++;
 	}
       }
@@ -279,15 +282,15 @@ public:
 	if(_c_wt.find(make_pair(word_id, topic_id)) != _c_wt.end()){
 	  c_wt_count = _c_wt[make_pair(word_id, topic_id)];
 	}
-	double score = (c_wt_count + _beta)/(sum_c_wt[topic_id] + words.size() * _beta);
-	phi.push_back(make_pair(score, words.at(word_id)));
+	double score = (c_wt_count + _beta)/(_sum_c_wt[topic_id] + _words.size() * _beta);
+	phi.push_back(make_pair(score, _words.at(word_id)));
       }
 
       // sort all theta
       vector<pair<double, string> > topic_given_theta;
       for(int document_id = 0; document_id < _documents.size(); ++document_id){
 	double score = all_theta[make_pair(document_id, topic_id)];
-	topic_given_theta.push_back(make_pair(score, documents.at(document_id)));
+	topic_given_theta.push_back(make_pair(score, _documents.at(document_id)));
       }
 
       // output
@@ -365,7 +368,7 @@ int main(int argc, char** argv){
   double alpha = atof(argv[3]);
   double beta = 0.01;
   int loop = atoi(argv[4]);
-  int show_lim = atoi(argv[5])
+  int show_lim = atoi(argv[5]);
   LabeledLDA t(alpha, beta, loop, show_lim);
 
   ifstream ifs;
