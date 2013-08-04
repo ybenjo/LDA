@@ -8,9 +8,12 @@ Practice of LDA and other Topic Model based Collapsed Gibbs Sampling.
 ## Implementation
 - Michal Rosen-Zvi, Tom Griffiths, Mark Steyvers, Padhraic Smyth. The Author-Topic Model for Authors and Documents. UAI (2004)  
 - Yi Fang, Luo Si, Naveen Somasundaram, Zhengtao Yu. Mining contrastive opinions on political texts using cross-perspective topic model. WSDM (2012)    
+- Daniel Ramage, David Hall, Ramesh Nallapati, Christopher D. Manning. Labeled LDA: a supervised topic model for credit attribution in multi-labeled corpora. EMNLP (2009)   
 
 ## Requirements
-- g++ ( >= 4.6)
+- g++ ( >= 4.6)   
+- boost   
+
 
 ## Author-Topic Model
 ### usage
@@ -38,10 +41,26 @@ Practice of LDA and other Topic Model based Collapsed Gibbs Sampling.
   - format: word \t word ...  
 - per1\_opinion, per2\_opinion: input opinion file. Each line is document.  
   - format: word \t word ...  
-  - topic/opinion file must same size.
+  - topic/opinion file must same size.  
 - alpha: \alpha.  
 - beta, beta1, beta2: \beta.   
 - k: # of topics.  
+- iter: # of sampling iterations.  
+- lim: limit of outputs.  
+
+## Labeled LDA
+### usage
+
+    make labeled_lda
+    ./labeled_lda document_word_file document_label_file alpha iter lim
+
+### params
+- document\_word\_file: input doc-word file. Each line is document.  
+  - format: document_name \t word \t word ...  
+- document\_label_file: input doc-label file. Each line is document.  
+  - format: document_name \t label\_1 \t label\_2 ...  
+  - doc-word/doc-label file must same size.  
+- alpha: \alpha.  
 - iter: # of sampling iterations.  
 - lim: limit of outputs.  
 
