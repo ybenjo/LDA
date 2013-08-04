@@ -373,7 +373,6 @@ int main(int argc, char** argv){
 
   ifstream ifs;
   string line;
-
   // read doc - label
   // ドキュメントの初期化にラベル情報が必要なので先に読む
   ifs.open(label_filename, ios::in);
@@ -384,7 +383,6 @@ int main(int argc, char** argv){
     t.set_label_information(elem);
   }
   ifs.close();
-
   // ゴミラベル追加
   t.set_garbage_label();
 
