@@ -150,7 +150,7 @@ public:
     double prob = (c_wt_count + _beta) / (_sum_c_wt[topic_id] + v * _beta);
     // ここが曖昧
     // LDA だと _t * _alpha になっているけど ???
-    prob *= (c_at_count + _alpha) / (_sum_c_at[document_id] + _labels.size() * _alpha);
+    prob *= (c_at_count + _alpha) / (_sum_c_at[document_id] + (_doc_labels[document_id]).size() * _alpha);
 
     return prob;
   }
@@ -244,7 +244,8 @@ public:
 	}
 
 	// ここもあやふや
-	double score = (c_at_count + _alpha)/(_sum_c_at[document_id] + _labels.size() * _alpha);
+	// double score = (c_at_count + _alpha)/(_sum_c_at[document_id] + _labels.size() * _alpha);
+	double score = (c_at_count + _alpha)/(_sum_c_at[document_id] + (_doc_labels[document_id]).size() * _alpha);
 	theta.push_back(make_pair(score, topic_id));
 	all_theta[make_pair(document_id, topic_id)] = score;
       }
