@@ -17,133 +17,167 @@ public:
   }
 
   int set_author(string author){
-    for(int i = 0; i < authors.size(); ++i){
-      if(authors.at(i) == author){
+    for(int i = 0; i < _authors.size(); ++i){
+      if(_authors.at(i) == author){
 	return i;
       }
     }
-    authors.push_back(author);
-    return authors.size() - 1;
+    _authors.push_back(author);
+    return _authors.size() - 1;
   }
 
   int set_word(string word){
-    for(int i = 0; i < words.size(); ++i){
-      if(words.at(i) == word){
+    for(int i = 0; i < _words.size(); ++i){
+      if(_words.at(i) == word){
 	return i;
       }
     }
-    words.push_back(word);
-    return words.size() - 1;
+    _words.push_back(word);
+    return _words.size() - 1;
   }
 
-  double set_document(vector<string> doc){
-    vector<int> id_doc;
+  double set_document(vector<string> authors, vector<string> words){
+    vector<int> word_ids;
+    vector<int> author_ids;
     // set author
-    string author = doc.at(0);
-    int author_id = set_author(author);
-    id_doc.push_back(author_id);
+    for(vector<string>::iterator i = authors.begin(); i != authors.end(); ++i){
+      string author = *i;
+      int author_id = set_author(author);
+      author_ids.push_back(author_id);
+    }
+    _author_ids.push_back(author_ids);
 
     // set word
-    for(vector<string>::iterator i = doc.begin() + 1; i != doc.end(); ++i){
+    for(vector<string>::iterator i = words.begin(); i != words.end(); ++i){
       int word_id = set_word(*i);
-      id_doc.push_back(word_id);
+      word_ids.push_back(word_id);
     }
-    each_documents.push_back(id_doc);
+    _documents.push_back(word_ids);
 
+    // set random authorss
+    vector<int> hidden_authors;
     // set random topics
     vector<int> topics;
-    // dummy topic
-    topics.push_back(0);
 
-    for(int i = 1; i < id_doc.size(); ++i){
-      int word_id = id_doc.at(i);
-      
-      sum_c_at[author_id]++;
-      
-      int init_word_topic = rand() % this->t;
-      topics.push_back(init_word_topic);
+    for(int i = 0; i < word_ids.size(); ++i){
+      int word_id = word_ids.at(i);
+      int init_topic = rand() % this->t;
+      int random_author_pos = rand() % author_ids.size();
+      int random_author = author_ids.at(random_author_pos);
 
-      c_wt[make_pair(word_id, init_word_topic)]++;
-      c_at[make_pair(author_id, init_word_topic)]++;
-      sum_c_wt[init_word_topic]++;
+      // inclement
+      ++_c_at[make_pair(random_author, init_topic)];
+      ++_c_wt[make_pair(word_id, init_topic)];
+      _sum_c_wt[init_topic]++;
+      _sum_c_at[random_author]++;
+      
+      // push
+      topics.push_back(init_topic);
+      hidden_authors.push_back(random_author);
     }
-    each_topics.push_back(topics);
+    _topics.push_back(topics);
+    _hidden_authors.push_back(hidden_authors);
   }
 
   double sampling_prob(int author_id, int word_id, int topic_id){
-    int v = words.size();
+    int v = _words.size();
     unordered_map<key, int, myhash, myeq>::iterator i;
 
     int c_wt_count = 0;
-    if(c_wt.find(make_pair(word_id, topic_id)) != c_wt.end()){
-      c_wt_count = c_wt[make_pair(word_id, topic_id)];
+    if(_c_wt.find(make_pair(word_id, topic_id)) != _c_wt.end()){
+      c_wt_count = _c_wt[make_pair(word_id, topic_id)];
     }
     
     int c_at_count = 0;
-    if(c_at.find(make_pair(author_id, topic_id)) != c_at.end()){
-      c_at_count = c_at[make_pair(author_id, topic_id)];
+    if(_c_at.find(make_pair(author_id, topic_id)) != _c_at.end()){
+      c_at_count = _c_at[make_pair(author_id, topic_id)];
     }
     
-    double prob = (c_wt_count + this->beta) / (sum_c_wt[topic_id] + v * this -> beta);
-    prob *= (c_at_count + this->alpha) / (sum_c_at[author_id] + this->t * this -> alpha);
+    double prob = (c_wt_count + this->beta) / (_sum_c_wt[topic_id] + v * this -> beta);
+    prob *= (c_at_count + this->alpha) / (_sum_c_at[author_id] + this->t * this -> alpha);
 
     return prob;
   }
 
   void sampling(int pos_doc, int pos_word){
-    int author_id = (each_documents.at(pos_doc)).at(0);
-    int word_id = (each_documents.at(pos_doc)).at(pos_word);
-    
-    // except current status
-    int prev_word_topic = (each_topics.at(pos_doc)).at(pos_word);
-    c_wt[make_pair(word_id, prev_word_topic)]--;
-    c_at[make_pair(author_id, prev_word_topic)]--;
-    sum_c_wt[prev_word_topic]--;
+    int word_id = (_documents.at(pos_doc)).at(pos_word);
+    int prev_topic = (_topics.at(pos_doc)).at(pos_word);
+    int prev_author = (_hidden_authors.at(pos_doc)).at(pos_word);
+    vector<int> authors = _author_ids.at(pos_doc);
 
     // vector contains prob density
     // image
     //  |------t_1-----|---t_2---|-t_3-|------t_4-----|
     // 0.0                ^^                         1.0
     vector<double> prob;
-    // sum all topics
-    for(int i = 0; i < this->t; ++i){
-      double now_prob = sampling_prob(author_id, word_id, i);
-      prob.push_back(now_prob);
-      if(i > 0){
-	prob.at(i) += prob.at(i - 1);
+    vector<pair<int, int> > topic_author_pairs;
+
+    // declement
+    --_c_wt[make_pair(word_id, prev_topic)];
+    --_sum_c_wt[prev_topic];
+
+    // sum all topic/author combinations
+    for(int j = 0; j < authors.size(); ++j){
+      int author_id = authors.at(j);
+
+      // declement temporally
+      --_c_at[make_pair(author_id, prev_topic)];
+      --_sum_c_at[author_id];
+
+      for(int topic_id = 0; topic_id < this->t; ++topic_id){
+	double now_prob = sampling_prob(author_id, word_id, topic_id);
+	prob.push_back(now_prob);
+	if(prob.size() > 1){
+	  prob.at(prob.size() - 1) += prob.at(prob.size() - 2);
+	}
+	topic_author_pairs.push_back(make_pair(topic_id, author_id));
       }
+
+      // recover
+      ++_c_at[make_pair(author_id, prev_topic)];
+      ++_sum_c_at[author_id];
     }
+
     // scaling [0,  1]
     double sum = prob.at(prob.size() - 1);
-    for(int i = 0; i < this->t; ++i){
+    for(int i = 0; i < (this->t * authors.size()); ++i){
       prob.at(i) /= sum;
     }
     
     double pos_prob = uniform_rand();
     int new_topic = 0;
+    int new_author = 0;
     if(pos_prob > prob.at(0)){
-      for(int i = 1; i < this->t; ++i){
+      for(int i = 1; i < (this->t * authors.size()); ++i){
 	if((pos_prob <= prob.at(i)) && (pos_prob > prob.at(i - 1))){
-	  new_topic = i;
+	  pair<int, int> new_elem = topic_author_pairs.at(i);
+	  new_topic = new_elem.first;
+	  new_author = new_elem.second;
 	  break;
 	}
       }
     }
 
-    // update each val
-    (each_topics.at(pos_doc)).at(pos_word) = new_topic;
-    c_at[make_pair(author_id, new_topic)]++;
-    c_wt[make_pair(word_id, new_topic)]++;
+    // update
+    (_topics.at(pos_doc)).at(pos_word) = new_topic;
+    (_hidden_authors.at(pos_doc)).at(pos_word) = new_author;
 
-    // update too
-    sum_c_wt[new_topic]++;
+    // declement
+    --_c_at[make_pair(prev_author, prev_topic)];
+    --_sum_c_at[prev_author];
+
+    // inclement
+    ++_c_wt[make_pair(word_id, new_topic)];
+    ++_sum_c_wt[new_topic];
+    ++_c_at[make_pair(new_author, new_topic)];
+    ++_sum_c_at[new_author];
   }
 
   void sampling_all(){
-    boost::progress_display progress( this->loop_count * this->each_documents.size() );
+    boost::progress_display progress( this->loop_count * this->_documents.size() );
     for(int i = 0; i < this->loop_count; ++i){
-      for(int pos_doc = 0; pos_doc <  each_documents.size(); ++pos_doc){
-	for(int pos_word = 1; pos_word < (each_documents.at(pos_doc)).size(); ++pos_word){
+      for(int pos_doc = 0; pos_doc <  _documents.size(); ++pos_doc){
+	for(int pos_word = 1; pos_word < (_documents.at(pos_doc)).size(); ++pos_word){
 	  sampling(pos_doc, pos_word);
 	}
 	++progress;
@@ -162,17 +196,17 @@ public:
     // value: theta
     unordered_map<key, double, myhash, myeq> all_theta;
     
-    for(int author_id = 0; author_id < authors.size(); ++author_id){
+    for(int author_id = 0; author_id < _authors.size(); ++author_id){
       // ソート
       vector<pair<double, int> > theta;
       for(int topic_id = 0; topic_id < this->t ; ++topic_id){
 
 	int c_at_count = 0;
-	if(c_at.find(make_pair(author_id, topic_id)) != c_at.end()){
-	  c_at_count = c_at[make_pair(author_id, topic_id)];
+	if(_c_at.find(make_pair(author_id, topic_id)) != _c_at.end()){
+	  c_at_count = _c_at[make_pair(author_id, topic_id)];
 	}
 	
-	double score = (c_at_count + this->alpha)/(sum_c_at[author_id] + this->t * this -> alpha);
+	double score = (c_at_count + this->alpha)/(_sum_c_at[author_id] + this->t * this -> alpha);
 	theta.push_back(make_pair(score, topic_id));
 	all_theta[make_pair(author_id, topic_id)] = score;
       }
@@ -185,7 +219,7 @@ public:
 	if(count >= this->show_limit){
 	  break;
 	}else{
-	  ofs_theta << authors.at(author_id) << "\t" << (*j).second << "\t" << (*j).first << endl;
+	  ofs_theta << _authors.at(author_id) << "\t" << (*j).second << "\t" << (*j).first << endl;
 	  count++;
 	}
       }
@@ -198,29 +232,23 @@ public:
     ofstream ofs_phi;
     ofs_phi.open((oss_phi.str()).c_str());
 
-    // output mix
-    ostringstream oss_mix;
-    oss_mix << filename << "_mix" ;
-    ofstream ofs_mix;
-    ofs_mix.open((oss_mix.str()).c_str());
-
     for(int topic_id = 0; topic_id < this->t; ++topic_id){
       // sort
       vector<pair<double, string> > phi;
-      for(int word_id = 0; word_id < words.size(); ++word_id){
+      for(int word_id = 0; word_id < _words.size(); ++word_id){
 	int c_wt_count = 0;
-	if(c_wt.find(make_pair(word_id, topic_id)) != c_wt.end()){
-	  c_wt_count = c_wt[make_pair(word_id, topic_id)];
+	if(_c_wt.find(make_pair(word_id, topic_id)) != _c_wt.end()){
+	  c_wt_count = _c_wt[make_pair(word_id, topic_id)];
 	}
-	double score = (c_wt_count + this->beta)/(sum_c_wt[topic_id] + words.size() * this -> beta);
-	phi.push_back(make_pair(score, words.at(word_id)));
+	double score = (c_wt_count + this->beta)/(_sum_c_wt[topic_id] + _words.size() * this -> beta);
+	phi.push_back(make_pair(score, _words.at(word_id)));
       }
 
       // sort all theta
       vector<pair<double, string> > topic_given_theta;
-      for(int author_id = 0; author_id < authors.size(); ++author_id){
+      for(int author_id = 0; author_id < _authors.size(); ++author_id){
 	double score = all_theta[make_pair(author_id, topic_id)];
-	topic_given_theta.push_back(make_pair(score, authors.at(author_id)));
+	topic_given_theta.push_back(make_pair(score, _authors.at(author_id)));
       }
 
       // output
@@ -232,52 +260,51 @@ public:
 	  break;
 	}else{
 	  ofs_phi << topic_id << "\t" << (*j).second << "\t" << (*j).first << endl;
-	  ofs_mix << topic_id << "\t" << (*j).second << "\t" << (*j).first << endl;
 	  count++;
 	}
       }
 
-      ofs_mix << "----------" << endl;
       sort(topic_given_theta.begin(), topic_given_theta.end());
       count = 0;
       for(j = topic_given_theta.rbegin(); j != topic_given_theta.rend(); ++j){
 	if(count >= this->show_limit){
 	  break;
 	}else{
-	  ofs_mix << topic_id << "\t" << (*j).second << "\t" << (*j).first << endl;
 	  count++;
 	}
       }
-      ofs_mix << "------------------------------" << endl;
     }
     ofs_phi.close();
-    ofs_mix.close();
   }
   
 private:
   // key: <word_id, topic_id>
   // value: # of assign
-  unordered_map<key, int, myhash, myeq> c_wt;
+  unordered_map<key, int, myhash, myeq> _c_wt;
   
   // key: <author_id, topic_id>
   // value: # of assign
-  unordered_map<key, int, myhash, myeq> c_at;
+  unordered_map<key, int, myhash, myeq> _c_at;
 
   // uniq author
-  vector<string> authors;
+  vector<string> _authors;
   // uniq words
-  vector<string> words;
-  
-  // vector of author_id, word_id, ...
-  // each element: document
-  vector<vector<int> > each_documents;
-  
-  // vector of dummy_topic_id, word_topic_id, ...
-  // each element: document
-  vector<vector<int> > each_topics;
+  vector<string> _words;
 
-  unordered_map<int, int> sum_c_at;
-  unordered_map<int, int> sum_c_wt;
+  // vector of author_id, ...
+  vector<vector<int> > _author_ids;
+
+  // vector of word_id, ...
+  vector<vector<int> > _documents;
+  
+  // vector of word_topic_id, ...
+  vector<vector<int> > _topics;
+
+  // vector of author_id, ...
+  vector<vector<int> > _hidden_authors;
+
+  unordered_map<int, int> _sum_c_at;
+  unordered_map<int, int> _sum_c_wt;
   
   // params
   double alpha;
@@ -299,11 +326,14 @@ int main(int argc, char** argv){
   string line;
   while(getline(ifs, line)){
     // file format
-    // author \t w_1 \t w_2 ...
+    // author:author:author \t w_1:w_2:...
     vector<string> elem = split_string(line, "\t");
-    t.set_document(elem);
+    vector<string> authors = split_string(elem.at(0), ":");
+    vector<string> words = split_string(elem.at(1), ":");
+    t.set_document(authors, words);
   }
   ifs.close();
   t.sampling_all();
   t.output(filename);
 }
+
