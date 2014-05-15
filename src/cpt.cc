@@ -177,18 +177,17 @@ public:
   }
 
   void sampling_all(){
-    // All topics
+
     for(int i = 0; i < this->iter; ++i){
+      // All topics
       for(int doc_id = 0; doc_id < doc_word.size(); ++doc_id){
 	vector<int> doc = doc_word.at(doc_id);
 	for(int pos_word = 0; pos_word < doc.size(); ++pos_word){
 	  sampling_topic(doc_id, pos_word);
 	}
       }
-    }
 
-    // All opinions
-    for(int i = 0; i < this->iter; ++i){
+      // All opinions
       for(int doc_id = 0; doc_id < doc_opinion.size(); ++doc_id){
 	vector<int> doc = doc_opinion.at(doc_id);
 	for(int pos_op = 0; pos_op < doc.size(); ++pos_op){
